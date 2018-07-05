@@ -9,6 +9,7 @@ from frappe.utils import flt, getdate, add_days, formatdate
 from frappe.model.document import Document
 from datetime import date
 from erpnext.controllers.item_variant import ItemTemplateCannotHaveStock
+from erpnext.accounts.utils import get_fiscal_year
 
 class StockFreezeError(frappe.ValidationError): pass
 
@@ -23,9 +24,8 @@ class StockLedgerEntry(Document):
 		self.validate_batch()
 		validate_warehouse_company(self.warehouse, self.company)
 		self.scrub_posting_time()
-
-		from erpnext.accounts.utils import validate_fiscal_year
-		validate_fiscal_year(self.posting_date, self.fiscal_year, self.meta.get_label("posting_date"), self)
+		self.validate_and_set_fiscal_year()
+		self.block_transactions_against_group_warehouse()
 
 	def on_submit(self):
 		self.check_stock_frozen_date()
@@ -58,7 +58,7 @@ class StockLedgerEntry(Document):
 
 	def validate_item(self):
 		item_det = frappe.db.sql("""select name, has_batch_no, docstatus,
-			is_stock_item, has_variants, stock_uom
+			is_stock_item, has_variants, stock_uom, create_new_batch
 			from tabItem where name=%s""", self.item_code, as_dict=True)
 
 		if not item_det:
@@ -75,10 +75,10 @@ class StockLedgerEntry(Document):
 				if not self.batch_no:
 					frappe.throw(_("Batch number is mandatory for Item {0}").format(self.item_code))
 				elif not frappe.db.get_value("Batch",{"item": self.item_code, "name": self.batch_no}):
-						frappe.throw(_("{0} is not a valid Batch Number for Item {1}").format(self.batch_no, self.item_code))
+					frappe.throw(_("{0} is not a valid Batch Number for Item {1}").format(self.batch_no, self.item_code))
 
-			elif item_det.has_batch_no ==0 and self.batch_no:
-					frappe.throw(_("The Item {0} cannot have Batch").format(self.item_code))
+			elif item_det.has_batch_no ==0 and self.batch_no and self.is_cancelled == "No":
+				frappe.throw(_("The Item {0} cannot have Batch").format(self.item_code))
 
 		if item_det.has_variants:
 			frappe.throw(_("Stock cannot exist for Item {0} since has variants").format(self.item_code),
@@ -111,9 +111,23 @@ class StockLedgerEntry(Document):
 				if getdate(self.posting_date) > getdate(expiry_date):
 					frappe.throw(_("Batch {0} of Item {1} has expired.").format(self.batch_no, self.item_code))
 
+	def validate_and_set_fiscal_year(self):
+		if not self.fiscal_year:
+			self.fiscal_year = get_fiscal_year(self.posting_date, company=self.company)[0]
+		else:
+			from erpnext.accounts.utils import validate_fiscal_year
+			validate_fiscal_year(self.posting_date, self.fiscal_year, self.company,
+				self.meta.get_label("posting_date"), self)
+
+	def block_transactions_against_group_warehouse(self):
+		from erpnext.stock.utils import is_group_warehouse
+		is_group_warehouse(self.warehouse)
+
 def on_doctype_update():
 	if not frappe.db.sql("""show index from `tabStock Ledger Entry`
 		where Key_name="posting_sort_index" """):
 		frappe.db.commit()
 		frappe.db.sql("""alter table `tabStock Ledger Entry`
 			add index posting_sort_index(posting_date, posting_time, name)""")
+
+	frappe.db.add_index("Stock Ledger Entry", ["voucher_no", "voucher_type"])

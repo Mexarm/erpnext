@@ -14,7 +14,7 @@ The templating engine is based on HTML and the [Jinja Templating](http://jinja.p
 
 Here is the default template:
 
-	{{ address_line1 }}<br>
+	{% raw %}{{ address_line1 }}<br>
 	{% if address_line2 %}{{ address_line2 }}<br>{% endif -%}
 	{{ city }}<br>
 	{% if state %}{{ state }}<br>{% endif -%}
@@ -22,10 +22,10 @@ Here is the default template:
 	{{ country }}<br>
 	{% if phone %}Phone: {{ phone }}<br>{% endif -%}
 	{% if fax %}Fax: {{ fax }}<br>{% endif -%}
-	{% if email_id %}Email: {{ email_id }}<br>{% endif -%}
+	{% if email_id %}Email: {{ email_id }}<br>{% endif -%}{% endraw %}
 
 ### Example
 
-<img class="screenshot" alt="Print Heading" src="{{docs_base_url}}/assets/img/setup/print/address-format.png">
+<img class="screenshot" alt="Print Heading" src="/docs/assets/img/setup/print/address-format.png">
 
 {next}

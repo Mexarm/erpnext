@@ -7,13 +7,12 @@ Wenn Sie bei Ihrer Tätigkeit bestimmte Prozesse an eine Drittpartei, bei der Si
 
 ### Fremdvergabe einstellen
 
-1\. Erstellen Sie getrennte Artikel für unbearbeitete und bearbeitet Produkte. Beispiel: Wenn Sie Ihrem Lieferanten unlackierte Artikel X übergeben und Ihnen der Lieferant lackierte Produkte X zurückliefert, dann erstellen Sie zwei Artikel: "X unlackiert" und "X".
+1. Erstellen Sie getrennte Artikel für unbearbeitete und bearbeitet Produkte. Beispiel: Wenn Sie Ihrem Lieferanten unlackierte Artikel X übergeben und Ihnen der Lieferant lackierte Produkte X zurückliefert, dann erstellen Sie zwei Artikel: "X unlackiert" und "X".
+2. Erstellen Sie ein Lager für den Lieferanten, damit Sie die übergebenen Artikel nachverfolgen können (möglicherweise geben Sie ja Artikel im Wert einer Monatslieferung außer Haus).
+3. Stellen Sie für den bearbeiteten Artikel  und der Artikelvorlage den Punkt "Ist Fremdvergabe" auf JA ein.
 
-2\. Erstellen Sie ein Lager für den Lieferanten, damit Sie die übergebenen Artikel nachverfolgen können (möglicherweise geben Sie ja Artikel im Wert einer Monatslieferung außer Haus).
+<img class="screenshot" alt="Fremdvergabe" src="/docs/assets/img/manufacturing/subcontract.png">
 
-3\. Stellen Sie für den bearbeiteten Artikel  und der Artikelvorlage den Punkt "Ist Fremdvergabe" auf JA ein.
-
-![Fremdvergabe]({{docs_base_url}}/assets/old_images/erpnext/subcontract.png)
 
 **Schritt 1:** Erstellen Sie für den bearbeiteten Artikel eine Stückliste, die den unbearbeiteten Artikel als Unterartikel enthält. Beispiel: Wenn Sie einen Stift herstellen, wird der bearbeitete Stift mit der Stückliste benannt, wbei der Tintentank, der Knopf und andere Artikel, die in die Fertigung eingehen als Unterartikel verwaltet werden.
 

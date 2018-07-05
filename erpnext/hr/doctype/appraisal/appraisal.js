@@ -24,7 +24,7 @@ cur_frm.cscript.refresh = function(doc,cdt,cdn){
 }
 
 cur_frm.cscript.kra_template = function(doc, dt, dn) {
-	frappe.model.map_current_doc({
+	erpnext.utils.map_current_doc({
 		method: "erpnext.hr.doctype.appraisal.appraisal.fetch_appraisal_template",
 		source_name: cur_frm.doc.kra_template,
 		frm: cur_frm
@@ -46,11 +46,11 @@ cur_frm.cscript.score = function(doc,cdt,cdn){
 	var d = locals[cdt][cdn];
 	if (d.score){
 		if (flt(d.score) > 5) {
-			msgprint(__("Score must be less than or equal to 5"));
+			frappe.msgprint(__("Score must be less than or equal to 5"));
 			d.score = 0;
 			refresh_field('score', d.name, 'goals');
 		}
-		total = flt(d.per_weightage*d.score)/100;
+		var total = flt(d.per_weightage*d.score)/100;
 		d.score_earned = total.toPrecision(2);
 		refresh_field('score_earned', d.name, 'goals');
 	}

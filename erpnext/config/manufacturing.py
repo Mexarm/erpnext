@@ -4,15 +4,9 @@ from frappe import _
 def get_data():
 	return [
 		{
-			"label": _("Documents"),
-			"icon": "icon-star",
+			"label": _("Production"),
+			"icon": "fa fa-star",
 			"items": [
-				{
-					"type": "doctype",
-					"name": "BOM",
-					"description": _("Bill of Materials (BOM)"),
-					"label": _("Bill of Material")
-				},
 				{
 					"type": "doctype",
 					"name": "Production Order",
@@ -20,8 +14,37 @@ def get_data():
 				},
 				{
 					"type": "doctype",
-					"name": "Time Log",
-					"description": _("Time Logs for manufacturing."),
+					"name": "Production Planning Tool",
+					"description": _("Generate Material Requests (MRP) and Production Orders."),
+				},
+				{
+					"type": "doctype",
+					"name": "Stock Entry",
+				},
+				{
+					"type": "doctype",
+					"name": "Timesheet",
+					"description": _("Time Sheet for manufacturing."),
+				},
+
+			]
+		},
+		{
+			"label": _("Bill of Materials"),
+			"items": [
+				{
+					"type": "doctype",
+					"name": "BOM",
+					"description": _("Bill of Materials (BOM)"),
+					"label": _("Bill of Materials")
+				},
+				{
+					"type": "doctype",
+					"name": "BOM",
+					"icon": "fa fa-sitemap",
+					"label": _("BOM Browser"),
+					"description": _("Tree of Bill of Materials"),
+					"link": "Tree/BOM",
 				},
 				{
 					"type": "doctype",
@@ -43,26 +66,13 @@ def get_data():
 		},
 		{
 			"label": _("Tools"),
-			"icon": "icon-wrench",
+			"icon": "fa fa-wrench",
 			"items": [
 				{
 					"type": "doctype",
-					"name": "Production Planning Tool",
-					"description": _("Generate Material Requests (MRP) and Production Orders."),
+					"name": "BOM Update Tool",
+					"description": _("Replace BOM and update latest price in all BOMs"),
 				},
-				{
-					"type": "doctype",
-					"name": "BOM Replace Tool",
-					"description": _("Replace Item / BOM in all BOMs"),
-				},
-				{
-					"type": "page",
-					"name": "bom-browser",
-					"icon": "icon-sitemap",
-					"label": _("BOM Browser"),
-					"description": _("Tree of Bill of Materials"),
-					"doctype": "BOM"
-				}
 			]
 		},
 		{
@@ -76,8 +86,8 @@ def get_data():
 			]
 		},
 		{
-			"label": _("Standard Reports"),
-			"icon": "icon-list",
+			"label": _("Reports"),
+			"icon": "fa fa-list",
 			"items": [
 				{
 					"type": "report",
@@ -102,6 +112,11 @@ def get_data():
 					"is_query_report": True,
 					"name": "Completed Production Orders",
 					"doctype": "Production Order"
+				},{ 
+					"type": "page",
+					"name": "production-analytics",
+					"label": _("Production Analytics"),  
+					"icon": "fa fa-bar-chart",
 				},
 				{
 					"type": "report",
@@ -109,11 +124,17 @@ def get_data():
 					"name": "BOM Search",
 					"doctype": "BOM"
 				},
+				{
+					"type": "report",
+					"is_query_report": True,
+					"name": "BOM Stock Report",
+					"doctype": "BOM"
+				}
 			]
 		},
 		{
 			"label": _("Help"),
-			"icon": "icon-facetime-video",
+			"icon": "fa fa-facetime-video",
 			"items": [
 				{
 					"type": "help",

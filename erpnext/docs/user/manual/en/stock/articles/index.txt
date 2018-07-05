@@ -3,7 +3,6 @@ auto-creation-of-material-request
 depreciation-entry
 maintain-stock-field-frozen-in-item-master
 manage-rejected-finished-goods-items
-managing-assets
 managing-batch-wise-inventory
 managing-fractions-in-uom
 opening-stock-balance-entry-for-the-serialized-and-batch-item
@@ -12,3 +11,7 @@ serial-no-naming
 stock-entry-purpose
 stock-level-report
 track-items-using-barcode
+stock-received-but-not-billed
+return-rejected-item
+item-valuation-transactions
+delivery-note-stock-error

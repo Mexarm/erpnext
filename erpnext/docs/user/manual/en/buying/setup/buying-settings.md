@@ -1,6 +1,8 @@
+# Buying Settings
+
 Buying Settings is where you can define properties which will be applied in the Buying module's transactions. 
 
-![Buying Settings]({{docs_base_url}}/assets/img/buying/buying-settings.png)
+![Buying Settings](/docs/assets/img/buying/buying-settings.png)
 
 Let us look at the various options that can be configured:
 
@@ -12,9 +14,9 @@ If not configured otherwise, ERPNext uses the Supplier's Name as the unique name
 
 You can define or select the Naming Series pattern from:
 
-> Setup > Settings > Naming Series
+`Setup > Data > Naming Series`
 
-[Click here to know more about defining a Naming Series.]({{docs_base_url}}/user/manual/en/setting-up/settings/naming-series.html)
+[Click here to know more about defining a Naming Series.](/docs/user/manual/en/setting-up/settings/naming-series.html)
 
 ### 2. Default Supplier Type
 

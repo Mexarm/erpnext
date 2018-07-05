@@ -5,7 +5,7 @@ from __future__ import unicode_literals
 import frappe
 import frappe.share
 from frappe import _
-from frappe.utils import cstr, now_datetime, cint, flt
+from frappe.utils import cstr, now_datetime, cint, flt, get_time
 from erpnext.controllers.status_updater import StatusUpdater
 
 class UOMMustBeIntegerError(frappe.ValidationError): pass
@@ -18,8 +18,19 @@ class TransactionBase(StatusUpdater):
 				frappe.db.get_value("Notification Control", None, dt + "_message"))
 
 	def validate_posting_time(self):
-		if not self.posting_time:
-			self.posting_time = now_datetime().strftime('%H:%M:%S')
+		# set Edit Posting Date and Time to 1 while data import
+		if frappe.flags.in_import and self.posting_date:
+			self.set_posting_time = 1
+
+		if not getattr(self, 'set_posting_time', None):
+			now = now_datetime()
+			self.posting_date = now.strftime('%Y-%m-%d')
+			self.posting_time = now.strftime('%H:%M:%S.%f')
+		elif self.posting_time:
+			try:
+				get_time(self.posting_time)
+			except ValueError:
+				frappe.throw(_('Invalid Posting Time'))
 
 	def add_calendar_event(self, opts, force=False):
 		if cstr(self.contact_by) != cstr(self._prev.contact_by) or \
@@ -32,10 +43,7 @@ class TransactionBase(StatusUpdater):
 		events = frappe.db.sql_list("""select name from `tabEvent`
 			where ref_type=%s and ref_name=%s""", (self.doctype, self.name))
 		if events:
-			frappe.db.sql("delete from `tabEvent` where name in (%s)"
-				.format(", ".join(['%s']*len(events))), tuple(events))
-
-			frappe.db.sql("delete from `tabEvent Role` where parent in (%s)"
+			frappe.db.sql("delete from `tabEvent` where name in ({0})"
 				.format(", ".join(['%s']*len(events))), tuple(events))
 
 	def _add_calendar_event(self, opts):
@@ -63,6 +71,8 @@ class TransactionBase(StatusUpdater):
 		validate_uom_is_integer(self, uom_field, qty_fields)
 
 	def validate_with_previous_doc(self, ref):
+		self.exclude_fields = ["conversion_factor", "uom"] if self.get('is_return') else []
+
 		for key, val in ref.items():
 			is_child = val.get("is_child_table")
 			ref_doc = {}
@@ -93,7 +103,7 @@ class TransactionBase(StatusUpdater):
 					frappe.throw(_("Invalid reference {0} {1}").format(reference_doctype, reference_name))
 
 				for field, condition in fields:
-					if prevdoc_values[field] is not None:
+					if prevdoc_values[field] is not None and field not in self.exclude_fields:
 						self.validate_value(field, condition, prevdoc_values[field], doc)
 
 
@@ -107,6 +117,24 @@ class TransactionBase(StatusUpdater):
 						frappe.throw(_("Row #{0}: Rate must be same as {1}: {2} ({3} / {4}) ")
 							.format(d.idx, ref_dt, d.get(ref_dn_field), d.rate, ref_rate))
 
+	def get_link_filters(self, for_doctype):
+		if hasattr(self, "prev_link_mapper") and self.prev_link_mapper.get(for_doctype):
+			fieldname = self.prev_link_mapper[for_doctype]["fieldname"]
+
+			values = filter(None, tuple([item.as_dict()[fieldname] for item in self.items]))
+
+			if values:
+				ret = {
+					for_doctype : {
+						"filters": [[for_doctype, "name", "in", values]]
+					}
+				}
+			else:
+				ret = None
+		else:
+			ret = None
+
+		return ret
 
 def delete_events(ref_type, ref_name):
 	frappe.delete_doc("Event", frappe.db.sql_list("""select name from `tabEvent`
@@ -126,6 +154,7 @@ def validate_uom_is_integer(doc, uom_field, qty_fields, child_dt=None):
 	for d in doc.get_all_children(parenttype=child_dt):
 		if d.get(uom_field) in integer_uoms:
 			for f in qty_fields:
-				if d.get(f):
-					if cint(d.get(f))!=d.get(f):
-						frappe.throw(_("Quantity cannot be a fraction in row {0}").format(d.idx), UOMMustBeIntegerError)
+				qty = d.get(f)
+				if qty:
+					if abs(cint(qty) - flt(qty)) > 0.0000001:
+						frappe.throw(_("Quantity ({0}) cannot be a fraction in row {1}").format(qty, d.idx), UOMMustBeIntegerError)

@@ -2,11 +2,13 @@
 # License: GNU General Public License v3. See license.txt
 
 from __future__ import unicode_literals
-import frappe
-from frappe.utils import flt, cint
-from frappe import _
 
+import frappe
+from frappe import _
+from frappe.model import no_value_fields
 from frappe.model.document import Document
+from frappe.utils import cint, flt
+
 
 class PackingSlip(Document):
 
@@ -86,6 +88,14 @@ class PackingSlip(Document):
 
 		rows = [d.item_code for d in self.get("items")]
 
+		# also pick custom fields from delivery note
+		custom_fields = ', '.join(['dni.`{0}`'.format(d.fieldname)
+			for d in frappe.get_meta("Delivery Note Item").get_custom_fields()
+			if d.fieldtype not in no_value_fields])
+
+		if custom_fields:
+			custom_fields = ', ' + custom_fields
+
 		condition = ""
 		if rows:
 			condition = " and item_code in (%s)" % (", ".join(["%s"]*len(rows)))
@@ -96,10 +106,10 @@ class PackingSlip(Document):
 				from `tabPacking Slip` ps, `tabPacking Slip Item` psi
 				where ps.name = psi.parent and ps.docstatus = 1
 				and ps.delivery_note = dni.parent and psi.item_code=dni.item_code) as packed_qty,
-			stock_uom, item_name, description, dni.batch_no
+			stock_uom, item_name, description, dni.batch_no {custom_fields}
 			from `tabDelivery Note Item` dni
-			where parent=%s %s
-			group by item_code""" % ("%s", condition),
+			where parent=%s {condition}
+			group by item_code""".format(condition=condition, custom_fields=custom_fields),
 			tuple([self.delivery_note] + rows), as_dict=1)
 
 		ps_item_qty = dict([[d.item_code, d.qty] for d in self.get("items")])
@@ -127,10 +137,10 @@ class PackingSlip(Document):
 
 		for d in self.get("items"):
 			res = frappe.db.get_value("Item", d.item_code,
-				["net_weight", "weight_uom"], as_dict=True)
+				["weight_per_unit", "weight_uom"], as_dict=True)
 
 			if res and len(res)>0:
-				d.net_weight = res["net_weight"]
+				d.net_weight = res["weight_per_unit"]
 				d.weight_uom = res["weight_uom"]
 
 	def get_recommended_case_no(self):
@@ -146,6 +156,8 @@ class PackingSlip(Document):
 	def get_items(self):
 		self.set("items", [])
 
+		custom_fields = frappe.get_meta("Delivery Note Item").get_custom_fields()
+
 		dn_details = self.get_details_for_packing()[0]
 		for item in dn_details:
 			if flt(item.qty) > flt(item.packed_qty):
@@ -156,6 +168,12 @@ class PackingSlip(Document):
 				ch.description = item.description
 				ch.batch_no = item.batch_no
 				ch.qty = flt(item.qty) - flt(item.packed_qty)
+
+				# copy custom fields
+				for d in custom_fields:
+					if item.get(d.fieldname):
+						ch.set(d.fieldname, item.get(d.fieldname))
+
 		self.update_item_details()
 
 def item_details(doctype, txt, searchfield, start, page_len, filters):

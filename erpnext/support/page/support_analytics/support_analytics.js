@@ -19,7 +19,6 @@ erpnext.SupportAnalytics = frappe.views.GridReportWithPlot.extend({
 	init: function(wrapper) {
 		this._super({
 			title: __("Support Analtyics"),
-			page: wrapper,
 			parent: $(wrapper).find('.layout-main'),
 			page: wrapper.page,
 			doctypes: ["Issue", "Fiscal Year"],
@@ -27,19 +26,24 @@ erpnext.SupportAnalytics = frappe.views.GridReportWithPlot.extend({
 	},
 
 	filters: [
-		{fieldtype:"Select", label: __("Fiscal Year"), link:"Fiscal Year",
+		{fieldname: "fiscal_year", fieldtype:"Select", label: __("Fiscal Year"), link:"Fiscal Year",
 			default_value: __("Select Fiscal Year") + "..."},
-		{fieldtype:"Date", label: __("From Date")},
-		{fieldtype:"Date", label: __("To Date")},
-		{fieldtype:"Select", label: __("Range"),
-			options:["Daily", "Weekly", "Monthly", "Quarterly", "Yearly"]}
+		{fieldname: "from_date", fieldtype:"Date", label: __("From Date")},
+		{fieldname: "to_date", fieldtype:"Date", label: __("To Date")},
+		{fieldname: "range", fieldtype:"Select", label: __("Range"),
+			options:["Daily", "Weekly", "Monthly", "Quarterly", "Yearly"], default_value: "Monthly"}
 	],
+	
+	init_filter_values: function() {
+		this._super();
+		this.filter_inputs.range.val('Monthly');
+	},
 
 	setup_columns: function() {
 		var std_columns = [
 			{id: "_check", name: __("Plot"), field: "_check", width: 30,
 				formatter: this.check_formatter},
-			{id: "status", name: __("Status"), field: "status", width: 100},
+			{id: "name", name: __("Status"), field: "name", width: 100},
 		];
 		this.make_date_range_columns();
 		this.columns = std_columns.concat(this.columns);
@@ -49,20 +53,20 @@ erpnext.SupportAnalytics = frappe.views.GridReportWithPlot.extend({
 		// add Opening, Closing, Totals rows
 		// if filtered by account and / or voucher
 		var me = this;
-		var total_tickets = {status:"All Tickets", "id": "all-tickets",
+		var total_tickets = {name:"All Tickets", "id": "all-tickets",
 			checked:true};
-		var days_to_close = {status:"Days to Close", "id":"days-to-close",
+		var days_to_close = {name:"Days to Close", "id":"days-to-close",
 			checked:false};
 		var total_closed = {};
-		var hours_to_close = {status:"Hours to Close", "id":"hours-to-close",
+		var hours_to_close = {name:"Hours to Close", "id":"hours-to-close",
 			checked:false};
-		var hours_to_respond = {status:"Hours to Respond", "id":"hours-to-respond",
+		var hours_to_respond = {name:"Hours to Respond", "id":"hours-to-respond",
 			checked:false};
 		var total_responded = {};
 
 
 		$.each(frappe.report_dump.data["Issue"], function(i, d) {
-			var dateobj = dateutil.str_to_obj(d.creation);
+			var dateobj = frappe.datetime.str_to_obj(d.creation);
 			var date = d.creation.split(" ")[0];
 			var col = me.column_map[date];
 			if(col) {
@@ -72,17 +76,17 @@ erpnext.SupportAnalytics = frappe.views.GridReportWithPlot.extend({
 					total_closed[col.field] = flt(total_closed[col.field]) + 1;
 
 					days_to_close[col.field] = flt(days_to_close[col.field])
-						+ dateutil.get_diff(d.resolution_date, d.creation);
+						+ frappe.datetime.get_diff(d.resolution_date, d.creation);
 
 					hours_to_close[col.field] = flt(hours_to_close[col.field])
-						+ dateutil.get_hour_diff(d.resolution_date, d.creation);
+						+ frappe.datetime.get_hour_diff(d.resolution_date, d.creation);
 
 				}
 				if (d.first_responded_on) {
 					total_responded[col.field] = flt(total_responded[col.field]) + 1;
 
 					hours_to_respond[col.field] = flt(hours_to_respond[col.field])
-						+ dateutil.get_hour_diff(d.first_responded_on, d.creation);
+						+ frappe.datetime.get_hour_diff(d.first_responded_on, d.creation);
 				}
 			}
 		});
@@ -100,11 +104,5 @@ erpnext.SupportAnalytics = frappe.views.GridReportWithPlot.extend({
 		})
 
 		this.data = [total_tickets, days_to_close, hours_to_close, hours_to_respond];
-	},
-
-	get_plot_points: function(item, col, idx) {
-		return [[dateutil.str_to_obj(col.id).getTime(), item[col.field]],
-			[dateutil.user_to_obj(col.name).getTime(), item[col.field]]];
 	}
-
 });

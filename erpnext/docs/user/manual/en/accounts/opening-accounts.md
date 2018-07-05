@@ -1,94 +1,107 @@
-Now that you have completed most of the setup, its time to start moving in!
+# Updating Opening Balance in Accounts
 
-There are two important sets of data you need to enter before you start your
-operations.
+If you are a new company you can start using ERPNext accounting module by going to chart of accounts. However, if you are migrating from a legacy accounting system like Tally or a Fox Pro based software
 
-  * Opening Account balances.
-  * Opening Stock balances.
+We recommend that you start using accounting in a new financial year, but you could start midway too. To setup your accounts, you will need the following for the “day” you start using accounting in ERPNext:
 
-To setup your accounts and stock correctly you will need accurate data to work
-with. Make sure you have the data setup for this.
+* Opening capital accounts - like your shareholder’s (or owner’) capital, loans, bank balances on that day.
 
-### Opening Accounts
+* List of outstanding sales and purchase invoices (Payables and Receivables).
 
-We usually recommend that you start using accounting in a new financial year,
-but you could start midway too. To setup your accounts, you will need the
-following for the “day” you start using accounting in ERPNext:
+If you were using another accounting software before, firstly you should close financial statements in that software. The closing balance of the accounts should be updated as an opening balance in the ERPNext. Before starting to update opening balance, ensure that your [Chart of Accounts](/docs/user/manual/en/accounts/chart-of-accounts.html) has all the Accounts required.
 
-Opening capital accounts - like your shareholder’s (or owner’) capital, loans,
-bank balances on that day. List of outstanding sales and purchase invoices
-(Payables and Receivables).
+> Opening entry is only for Balance Sheet accounts and not for the Accounts in the Profit and Loss statement.
 
-Based on Voucher Type
+  * For all assets (excluding Accounts Receivables): This entry will contain all your assets except the amounts you are expecting from your Customers against outstanding Sales Invoices. You will have to update your receivables by making an individual entry for each Invoice (this is because, the system will help you track the invoices which are yet to be paid). You can credit the sum of all these debits against the **Temporary Opening** account.
 
-You can select accounts based on the voucher type. In such a scenario, your balance sheet should be balanced.
+  * For all liabilities: Similarly you need to pass a Journal Entry for your Opening Liabilities (except for the bills you have to pay) against **Temporary Opening** account.
 
-<img class="screenshot" alt="Opening Account" src="{{docs_base_url}}/assets/img/accounts/opening-account-1.png">
+###Opening Entry
 
- Also, note that if there are more than 300 ledgers, the system will crash. Thus to avoid such a situation, you can open accounts by using temporary accounts.
+#### Step 1: New Journal Entry
 
-#### Temporary Accounts
+To open new Journal Entry, go to:
 
-A nice way to simplify opening is to use a temporary account
-just for opening. These accounts will become zero once all your old
-invoices and opening balances of bank, debt stock etc are entered.
-In the standard chart of accounts, a **Temperory Opening** account is created under
-assets
+`Explore > Accounts > Journal Entry`
 
-#### The Opening Entry
+#### Step 2: Entry Type
 
-In ERPNext Opening Accounts are setup by submitting a special Journal Entries
-(Journal Entry).
+If Entry Type is selected as Opening Entry, all the Balance Sheet Accounts will be auto-fetched in the Journal Entry.
 
-Note: Make sure to set “Is Opening” as “Yes” in the More Info section.
+<img class="screenshot" alt="Opening Account" src="/docs/assets/img/accounts/opening-account-1.png">
 
-> Setup > Opening Accounts and Stock > Opening Accounting Entries.
+#### Step 3: Posting Date
 
-Complete Journal Entries on the Debit and Credit side.
+Select Posting Date on which Accounts Opening Balance will be updated.
 
-![Opening Entry]({{docs_base_url}}/assets/old_images/erpnext/opening-entry-1.png)
+#### Step 4: Enter Debit/Credit Value
 
- To update opening balance is to make Journal Entry for an individual/group of accounts.
+For each Account, enter opening value in the Debit or Credit column. As per the double entry valuation system, Total Debit value in a entry must be equal to Total Credit value.
 
-For example, if you want to update balance in three bank accounts, then make Journal Entrys in this manner.
+<img class="screenshot" alt="Opening Account" src="/docs/assets/img/accounts/opening-6.png">
 
-![Opening Temp Entry]({{docs_base_url}}/assets/old_images/erpnext/image-temp-opening.png)
+####Step 5: Is Opening
 
+Set field `Is Opening` as `Yes`.
 
-![Opening Entry]({{docs_base_url}}/assets/old_images/erpnext/opening-entry-2.png)
+<img class="screenshot" alt="Opening Account" src="/docs/assets/img/accounts/opening-3.png">
 
-Temporary Asset and Liability account is used for balancing purpose. When you update opening balance in Liability Account, you can use Temporary Asset Account for balancing.
+####Step 6: Save and Submit
 
-This way, you can update opening balance in Asset and Liability accounts.
+After enter opening balance for each account, Save and Submit Journal Entry. To check if Opening Balance for an account is updated correctly, you can check Trial Balance report.
 
-You can make two Opening Journal Entrys:
+###Selecting Accounts Manually
 
-  * For all assets (excluding Accounts Receivables): This entry will contain all your assets except the amounts you are expecting from your Customers against outstanding Sales Invoices. You will have to update your receivables by making an individual entry for each Invoice (this is because, the system will help you track the invoices which are yet to be paid). You can credit the sum of all these debits against the **Temperory Opening** account.
-  * For all liabilities: Similarly you need to pass a Journal Entry for your Opening Liabilities (except for the bills you have to pay) against **Temperory Opening** account.
-  * In this method you can update opening balance of specific balancesheet accounts and not for all.
-  * Opening entry is only for balance sheet accounts and not for expense or Income accounts.
+If your Balance Sheet has many Accounts, then updating Account Opening balance from single Journal Entry can lead to performance issues. In such a scenario, you can multiple Journal Entries to update opening balance in all the Accounts.
 
-After completing the accounting entries, the trial balance report will look
-like the one given below:
+If you are updating account opening balance in few accounts at a time, you can use **Temporary Opening** account for balancing purpose. In the standard chart of accounts, a Temporary Opening Account is auto-created under Assets.
 
+<img class="screenshot" alt="Opening Account" src="/docs/assets/img/accounts/opening-7.png">
 
-![Trial Balance]({{docs_base_url}}/assets/old_images/erpnext/trial-balance-1.png)
+In the Journal Entry, manually select an Account for which opening balance is to be updated. For each Account, enter opening balance value in the Debit or Credit column, based on it's Account Type (Asset or Liability).
 
-#### Outstanding Invoices
+For example, if you want to update balance in bank accounts, create Journal Entry as following.
 
-After your Opening Journal Entrys are made, you will need to enter each
-Sales Invoice and Purchase Invoice that is yet to be paid.
+<img class="screenshot" alt="Opening Account" src="/docs/assets/img/accounts/opening-2.png">
 
-Since you have already booked the income or expense on these invoices in the
-previous period, select the temp opening account **Temporary Opening** in the “Income” and
-“Expense” accounts.
+Once all your invoices are entered, your **Temporary Opening** account will have a balance of zero!
+
+###Trial Balance
+
+After completing the accounting entries, the trial balance report will look like the one given below:
+
+<img class="screenshot" alt="Opening Account" src="/docs/assets/img/accounts/opening-4.png">
+
+###Stock Opening
+
+To track stock balance in the Chart of Account, an Account is created for each Warehouse.
+
+`Chart of Accounts > Assets > Current Asset > StocK Assets > (Warehouse Account)`
+
+<img class="screenshot" alt="Opening Account" src="/docs/assets/img/accounts/opening-5.png">
+
+To update stock opening balance, create [Stock Reconciliation entry](/docs/user/manual/en/stock/opening-stock.html). Based on the valuation of items's update in the Warehouse, balance will be updated in the Warehouse account.
+
+###Fixed Asset Opening
+
+Opening balance for the fixed asset account should be updated via Journal Entry. Assets which are not fully depreciated should be added in the [Asset master](/docs/user/manual/en/accounts/managing-fixed-assets.html). For adding Assets in your possession, ensure to check **Is Existing Asset** field.
+
+### Outstanding Payables and Receivables
+
+After opening Journal Entries are made, you will need to enter the Sales Invoice and Purchase Invoice that is yet to be paid.
+
+Since you have already booked the income or expense on these invoices in the previous period, select **Temporary Opening** in the “Income” and “Expense” accounts.
 
 > Note: Make sure to set each invoice as “Is Opening”!
 
-If you don’t care what items are in that invoice, just make a dummy item entry
-in the Invoice. Item code in the Invoice is not necessary, so it should not be
-such a problem.
+If you don’t care what items are in that invoice, just make a dummy item entry in the Invoice. Item code in the Invoice is not necessary, so it should not be such a problem.
 
-Once all your invoices are entered, your **Temperory Opening** account will have a balance of zero!
+You can also do this quickly using the **Opening Invoice Creation Tool**
+
+To use this tool, just type "Opening Invoice" in the search bar and select the **Opening Invoice Creation Tool**
+
+Here, select the company and type of invoice (sales or purchase) and add a line item for each invoice you want to create.
+
+<img class="screenshot" alt="Opening Invoice Creation Tool" src="/docs/assets/img/accounts/opening-invoice-creation-tool.png">
 
 {next}

@@ -1,3 +1,5 @@
+# Custom Script Fetch Values From Master
+
 To pull a value of a link on selection, use the `add_fetch` method.
 
     
@@ -18,8 +20,5 @@ Then in the Sales Invoice Custom Script, add this line:
     cur_frm.add_fetch('customer','vat_id','vat_id')
     
 
-* * *
-
-See: [How to create a custom script]({{docs_base_url}}/user/manual/en/customize-erpnext/custom-scripts.html)
 
 {next}

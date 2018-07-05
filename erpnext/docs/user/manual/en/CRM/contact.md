@@ -1,7 +1,6 @@
 # Contact and Address
 
-Contacts are not necessarily linked to another document. They can be stand alone, just a Contact with a First Name not linked to any other document or 
-Contacts can be linked to a Party, that is either a Customer or a Supplier.
+Contacts do not need to be linked to another document, they can be stand alone.  You can even create a contact with only a first name, not linked to any other document or party (Customer/Supplier).
 
 The Contact_ID is automatically created:
 
@@ -19,12 +18,12 @@ To create a new Contact go to,
 
 > CRM > Contact > New
 
-<img class="screenshot" alt="Contact" src="{{docs_base_url}}/assets/img/crm/contact.png">
+<img class="screenshot" alt="Contact" src="/docs/assets/img/crm/contact.png">
 
 Or you can add a Contact or Address directly from the Customer record, click on “New
 Contact” or “New Address”.
 
-<img class="screenshot" alt="Contact" src="{{docs_base_url}}/assets/img/crm/contact-from-cust.png">
+<img class="screenshot" alt="Contact" src="/docs/assets/img/crm/contact-from-cust.png">
 
 > Tip: When you select a Customer in any transaction, one Contact and Address
 gets pre-selected. This is the “Default Contact or Address”.
@@ -36,7 +35,7 @@ Import Tool.
 
 ### Address Titles
 
-The Address Title (Name of person or organization that this address belongs to) is a free format unlinked field. The ID is automatically created from the Address Title upper score Address Type. (AdressTitle-AddressType).
+The Address Title (Name of person or organization that this address belongs to) is a free format unlinked field. The ID is automatically created from the Address Title and Address Type. (AddressTitle-AddressType).
 
 ### Address Linking
 

@@ -2,21 +2,21 @@
 # License: GNU General Public License v3. See license.txt
 
 from __future__ import unicode_literals
-import frappe
+import frappe, erpnext
 from frappe.utils import flt, cstr, cint
 from frappe import _
 from frappe.model.meta import get_field_precision
-from erpnext.accounts.utils import validate_expense_against_budget
+from erpnext.accounts.doctype.budget.budget import validate_expense_against_budget
 
 
 class StockAccountInvalidTransaction(frappe.ValidationError): pass
 
-def make_gl_entries(gl_map, cancel=False, adv_adj=False, merge_entries=True, update_outstanding='Yes'):
+def make_gl_entries(gl_map, cancel=False, adv_adj=False, merge_entries=True, update_outstanding='Yes', from_repost=False):
 	if gl_map:
 		if not cancel:
 			gl_map = process_gl_map(gl_map, merge_entries)
 			if gl_map and len(gl_map) > 1:
-				save_entries(gl_map, adv_adj, update_outstanding)
+				save_entries(gl_map, adv_adj, update_outstanding, from_repost)
 			else:
 				frappe.throw(_("Incorrect number of General Ledger Entries found. You might have selected a wrong Account in the transaction."))
 		else:
@@ -25,7 +25,6 @@ def make_gl_entries(gl_map, cancel=False, adv_adj=False, merge_entries=True, upd
 def process_gl_map(gl_map, merge_entries=True):
 	if merge_entries:
 		gl_map = merge_similar_entries(gl_map)
-
 	for entry in gl_map:
 		# toggle debit, credit if negative entry
 		if flt(entry.debit) < 0:
@@ -75,31 +74,37 @@ def check_if_in_list(gle, gl_map):
 			and cstr(e.get('party'))==cstr(gle.get('party')) \
 			and cstr(e.get('against_voucher'))==cstr(gle.get('against_voucher')) \
 			and cstr(e.get('against_voucher_type')) == cstr(gle.get('against_voucher_type')) \
-			and cstr(e.get('cost_center')) == cstr(gle.get('cost_center')):
+			and cstr(e.get('cost_center')) == cstr(gle.get('cost_center')) \
+			and cstr(e.get('project')) == cstr(gle.get('project')):
 				return e
 
-def save_entries(gl_map, adv_adj, update_outstanding):
-	validate_account_for_auto_accounting_for_stock(gl_map)
+def save_entries(gl_map, adv_adj, update_outstanding, from_repost=False):
+	if not from_repost:
+		validate_account_for_perpetual_inventory(gl_map)
+		
 	round_off_debit_credit(gl_map)
 
 	for entry in gl_map:
-		make_entry(entry, adv_adj, update_outstanding)
+		make_entry(entry, adv_adj, update_outstanding, from_repost)
+		
 		# check against budget
-		validate_expense_against_budget(entry)
+		if not from_repost:
+			validate_expense_against_budget(entry)
 
-def make_entry(args, adv_adj, update_outstanding):
+def make_entry(args, adv_adj, update_outstanding, from_repost=False):
 	args.update({"doctype": "GL Entry"})
 	gle = frappe.get_doc(args)
 	gle.flags.ignore_permissions = 1
+	gle.flags.from_repost = from_repost
 	gle.insert()
-	gle.run_method("on_update_with_args", adv_adj, update_outstanding)
+	gle.run_method("on_update_with_args", adv_adj, update_outstanding, from_repost)
 	gle.submit()
 
-def validate_account_for_auto_accounting_for_stock(gl_map):
-	if cint(frappe.db.get_single_value("Accounts Settings", "auto_accounting_for_stock")) \
+def validate_account_for_perpetual_inventory(gl_map):
+	if cint(erpnext.is_perpetual_inventory_enabled(gl_map[0].company)) \
 		and gl_map[0].voucher_type=="Journal Entry":
 			aii_accounts = [d[0] for d in frappe.db.sql("""select name from tabAccount
-				where account_type = 'Warehouse' and (warehouse != '' and warehouse is not null)""")]
+				where account_type = 'Stock' and is_group=0""")]
 
 			for entry in gl_map:
 				if entry.account in aii_accounts:
@@ -117,7 +122,13 @@ def round_off_debit_credit(gl_map):
 		debit_credit_diff += entry.debit - entry.credit
 
 	debit_credit_diff = flt(debit_credit_diff, precision)
-	if abs(debit_credit_diff) >= (5.0 / (10**precision)):
+	
+	if gl_map[0]["voucher_type"] in ("Journal Entry", "Payment Entry"):
+		allowance = 5.0 / (10**precision)
+	else:
+		allowance = .5
+	
+	if abs(debit_credit_diff) >= allowance:
 		frappe.throw(_("Debit and Credit not equal for {0} #{1}. Difference is {2}.")
 			.format(gl_map[0].voucher_type, gl_map[0].voucher_no, debit_credit_diff))
 
@@ -125,18 +136,11 @@ def round_off_debit_credit(gl_map):
 		make_round_off_gle(gl_map, debit_credit_diff)
 
 def make_round_off_gle(gl_map, debit_credit_diff):
-	round_off_account, round_off_cost_center = frappe.db.get_value("Company", gl_map[0].company,
-		["round_off_account", "round_off_cost_center"]) or [None, None]
-	if not round_off_account:
-		frappe.throw(_("Please mention Round Off Account in Company"))
-
-	if not round_off_cost_center:
-		frappe.throw(_("Please mention Round Off Cost Center in Company"))
-
+	round_off_account, round_off_cost_center = get_round_off_account_and_cost_center(gl_map[0].company)
 
 	round_off_gle = frappe._dict()
 	for k in ["voucher_type", "voucher_no", "company",
-		"posting_date", "remarks", "fiscal_year", "is_opening"]:
+		"posting_date", "remarks", "is_opening"]:
 			round_off_gle[k] = gl_map[0][k]
 
 	round_off_gle.update({
@@ -154,6 +158,16 @@ def make_round_off_gle(gl_map, debit_credit_diff):
 
 	gl_map.append(round_off_gle)
 
+def get_round_off_account_and_cost_center(company):
+	round_off_account, round_off_cost_center = frappe.db.get_value("Company", company,
+		["round_off_account", "round_off_cost_center"]) or [None, None]
+	if not round_off_account:
+		frappe.throw(_("Please mention Round Off Account in Company"))
+
+	if not round_off_cost_center:
+		frappe.throw(_("Please mention Round Off Cost Center in Company"))
+
+	return round_off_account, round_off_cost_center
 
 def delete_gl_entries(gl_entries=None, voucher_type=None, voucher_no=None,
 		adv_adj=False, update_outstanding="Yes"):
@@ -162,8 +176,12 @@ def delete_gl_entries(gl_entries=None, voucher_type=None, voucher_no=None,
 		check_freezing_date, update_outstanding_amt, validate_frozen_account
 
 	if not gl_entries:
-		gl_entries = frappe.db.sql("""select * from `tabGL Entry`
+		gl_entries = frappe.db.sql("""
+			select account, posting_date, party_type, party, cost_center, fiscal_year,voucher_type,
+			voucher_no, against_voucher_type, against_voucher, cost_center, company
+			from `tabGL Entry`
 			where voucher_type=%s and voucher_no=%s""", (voucher_type, voucher_no), as_dict=True)
+
 	if gl_entries:
 		check_freezing_date(gl_entries[0]["posting_date"], adv_adj)
 
@@ -173,8 +191,9 @@ def delete_gl_entries(gl_entries=None, voucher_type=None, voucher_no=None,
 	for entry in gl_entries:
 		validate_frozen_account(entry["account"], adv_adj)
 		validate_balance_type(entry["account"], adv_adj)
-		validate_expense_against_budget(entry)
-
-		if entry.get("against_voucher") and update_outstanding == 'Yes':
+		if not adv_adj:
+			validate_expense_against_budget(entry)
+		
+		if entry.get("against_voucher") and update_outstanding == 'Yes' and not adv_adj:
 			update_outstanding_amt(entry["account"], entry.get("party_type"), entry.get("party"), entry.get("against_voucher_type"),
 				entry.get("against_voucher"), on_cancel=True)

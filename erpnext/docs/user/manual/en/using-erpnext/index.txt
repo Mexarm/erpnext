@@ -1,6 +1,8 @@
 to-do
+restore-deleted-docs
+document-versioning
 collaborating-around-forms
-messages
+chat
 notes
 calendar
 assignment

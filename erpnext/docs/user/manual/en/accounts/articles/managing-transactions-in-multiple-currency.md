@@ -1,6 +1,6 @@
 #Managing Transactions In Multiple Currency
 
-In ERPNext, transactions can be created in the base currency as well as in parties (customer or supplier) currency. In transaction is created in the parties currency, their currency symbol is updated in the print foramt as well.
+In ERPNext, transactions can be created in the base currency as well as in parties (customer or supplier) currency. If transaction is created in the parties currency, their currency symbol is updated in the print format as well.
 
 Let's consider a Sales Invoice, where your base currency is of a Company is USD and party currency is EUR.
 
@@ -14,9 +14,9 @@ Select Customer from the Customer master. If default Currency is updated in the 
 
 #### Step 3: Exchange Rate
 
-Currenct Exchange between between base currency and customer currency will auto-fetch.
+Currency Exchange between base currency and customer currency will auto-fetch.
 
-<img alt="Accounts Frozen Date" class="screenshot" src="{{docs_base_url}}/assets/img/articles/multiple-currency-1.gif">
+<img alt="Accounts Frozen Date" class="screenshot" src="/docs/assets/img/articles/multiple-currency-1.gif">
 
 #### Step 4: Update Details
 
@@ -26,7 +26,7 @@ Update other details like Item, Taxes, Terms. In the Taxes and other Charges tab
 
 Save Sales Invoice and then check Print Format. For all the Currency field (rate, amount, totals) Customer's Currency symbol will be updated as well.
 
-<img alt="Accounts Frozen Date" class="screenshot" src="{{docs_base_url}}/assets/img/articles/multiple-currency-2.png">
+<img alt="Accounts Frozen Date" class="screenshot" src="/docs/assets/img/articles/multiple-currency-2.png">
 
 #### Currency Exchange Masters
 
@@ -34,5 +34,5 @@ If you have come to terms with party to follow standard exchange rate throughout
 
 `Accounts > Setup > Currency Exchange`
 
- If system find Exchange Rate master for any cuurrecy, it is given preference over currency exchnage rate.
+ If system find Exchange Rate master for any currency, it is given preference over currency exchange rate.
 

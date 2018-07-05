@@ -1,13 +1,12 @@
 # Copyright (c) 2015, Frappe Technologies Pvt. Ltd. and Contributors
 # License: GNU General Public License v3. See license.txt
 
-from __future__ import unicode_literals
+from __future__ import print_function, unicode_literals
 import frappe
 
 from frappe.utils import flt, cstr, nowdate, nowtime
 from erpnext.stock.utils import update_bin
 from erpnext.stock.stock_ledger import update_entries_after
-from erpnext.accounts.utils import get_fiscal_year
 
 def repost(only_actual=False, allow_negative_stock=False, allow_zero_rate=False, only_bin=False):
 	"""
@@ -68,7 +67,7 @@ def get_balance_qty_from_sle(item_code, warehouse):
 def get_reserved_qty(item_code, warehouse):
 	reserved_qty = frappe.db.sql("""
 		select
-			sum((dnpi_qty / so_item_qty) * (so_item_qty - so_item_delivered_qty))
+			sum(dnpi_qty * ((so_item_qty - so_item_delivered_qty) / so_item_qty))
 		from
 			(
 				(select
@@ -92,17 +91,17 @@ def get_reserved_qty(item_code, warehouse):
 					and parenttype="Sales Order"
 					and item_code != parent_item
 					and exists (select * from `tabSales Order` so
-					where name = dnpi_in.parent and docstatus = 1 and status not in ('Stopped','Closed'))
+					where name = dnpi_in.parent and docstatus = 1 and status != 'Closed')
 				) dnpi)
 			union
-				(select qty as dnpi_qty, qty as so_item_qty,
+				(select stock_qty as dnpi_qty, qty as so_item_qty,
 					delivered_qty as so_item_delivered_qty, parent, name
 				from `tabSales Order Item` so_item
 				where item_code = %s and warehouse = %s
 				and (so_item.delivered_by_supplier is null or so_item.delivered_by_supplier = 0)
 				and exists(select * from `tabSales Order` so
 					where so.name = so_item.parent and so.docstatus = 1
-					and so.status not in ('Stopped','Closed')))
+					and so.status != 'Closed'))
 			) tab
 		where
 			so_item_qty >= so_item_delivered_qty
@@ -125,7 +124,7 @@ def get_ordered_qty(item_code, warehouse):
 		from `tabPurchase Order Item` po_item, `tabPurchase Order` po
 		where po_item.item_code=%s and po_item.warehouse=%s
 		and po_item.qty > po_item.received_qty and po_item.parent=po.name
-		and po.status not in ('Stopped', 'Closed', 'Delivered') and po.docstatus=1
+		and po.status not in ('Closed', 'Delivered') and po.docstatus=1
 		and po_item.delivered_by_supplier = 0""", (item_code, warehouse))
 
 	return flt(ordered_qty[0][0]) if ordered_qty else 0
@@ -133,7 +132,7 @@ def get_ordered_qty(item_code, warehouse):
 def get_planned_qty(item_code, warehouse):
 	planned_qty = frappe.db.sql("""
 		select sum(qty - produced_qty) from `tabProduction Order`
-		where production_item = %s and fg_warehouse = %s and status != "Stopped"
+		where production_item = %s and fg_warehouse = %s and status not in ("Stopped", "Completed")
 		and docstatus=1 and qty > produced_qty""", (item_code, warehouse))
 
 	return flt(planned_qty[0][0]) if planned_qty else 0
@@ -149,8 +148,9 @@ def update_bin_qty(item_code, warehouse, qty_dict=None):
 			mismatch = True
 
 	if mismatch:
-		bin.projected_qty = flt(bin.actual_qty) + flt(bin.ordered_qty) + \
+		bin.projected_qty = (flt(bin.actual_qty) + flt(bin.ordered_qty) +
 			flt(bin.indented_qty) + flt(bin.planned_qty) - flt(bin.reserved_qty)
+			- flt(bin.reserved_qty_for_production)) - flt(bin.reserved_qty_for_sub_contract)
 
 		bin.save()
 
@@ -158,7 +158,6 @@ def set_stock_balance_as_per_serial_no(item_code=None, posting_date=None, postin
 	 	fiscal_year=None):
 	if not posting_date: posting_date = nowdate()
 	if not posting_time: posting_time = nowtime()
-	if not fiscal_year: fiscal_year = get_fiscal_year(posting_date)[0]
 
 	condition = " and item.name='%s'" % item_code.replace("'", "\'") if item_code else ""
 
@@ -171,7 +170,7 @@ def set_stock_balance_as_per_serial_no(item_code=None, posting_date=None, postin
 			where item_code=%s and warehouse=%s and docstatus < 2""", (d[0], d[1]))
 
 		if serial_nos and flt(serial_nos[0][0]) != flt(d[2]):
-			print d[0], d[1], d[2], serial_nos[0][0]
+			print(d[0], d[1], d[2], serial_nos[0][0])
 
 		sle = frappe.db.sql("""select valuation_rate, company from `tabStock Ledger Entry`
 			where item_code = %s and warehouse = %s and ifnull(is_cancelled, 'No') = 'No'
@@ -191,7 +190,6 @@ def set_stock_balance_as_per_serial_no(item_code=None, posting_date=None, postin
 			'stock_uom'					: d[3],
 			'incoming_rate'				: sle and flt(serial_nos[0][0]) > flt(d[2]) and flt(sle[0][0]) or 0,
 			'company'					: sle and cstr(sle[0][1]) or 0,
-			'fiscal_year'				: fiscal_year,
 			'is_cancelled'			 	: 'No',
 			'batch_no'					: '',
 			'serial_no'					: ''
@@ -232,8 +230,9 @@ def reset_serial_no_status_and_warehouse(serial_nos=None):
 				pass
 
 def repost_all_stock_vouchers():
-	warehouses_with_account = frappe.db.sql_list("""select master_name from tabAccount
-		where ifnull(account_type, '') = 'Warehouse'""")
+	warehouses_with_account = frappe.db.sql_list("""select warehouse from tabAccount
+		where ifnull(account_type, '') = 'Stock' and (warehouse is not null and warehouse != '')
+		and is_group=0""")
 
 	vouchers = frappe.db.sql("""select distinct voucher_type, voucher_no
 		from `tabStock Ledger Entry` sle
@@ -245,7 +244,7 @@ def repost_all_stock_vouchers():
 	i = 0
 	for voucher_type, voucher_no in vouchers:
 		i+=1
-		print i, "/", len(vouchers)
+		print(i, "/", len(vouchers), voucher_type, voucher_no)
 		try:
 			for dt in ["Stock Ledger Entry", "GL Entry"]:
 				frappe.db.sql("""delete from `tab%s` where voucher_type=%s and voucher_no=%s"""%
@@ -260,9 +259,9 @@ def repost_all_stock_vouchers():
 			doc.update_stock_ledger()
 			doc.make_gl_entries(repost_future_gle=False)
 			frappe.db.commit()
-		except Exception, e:
-			print frappe.get_traceback()
+		except Exception as e:
+			print(frappe.get_traceback())
 			rejected.append([voucher_type, voucher_no])
 			frappe.db.rollback()
 
-	print rejected
+	print(rejected)

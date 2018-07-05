@@ -2,7 +2,7 @@
 # License: GNU General Public License v3. See license.txt
 
 from __future__ import unicode_literals
-import frappe
+import frappe, erpnext
 from frappe import _
 import json
 from frappe.utils import flt, cstr, nowdate, nowtime
@@ -15,26 +15,38 @@ def get_stock_value_on(warehouse=None, posting_date=None, item_code=None):
 	values, condition = [posting_date], ""
 
 	if warehouse:
-		values.append(warehouse)
-		condition += " AND warehouse = %s"
+		
+		lft, rgt, is_group = frappe.db.get_value("Warehouse", warehouse, ["lft", "rgt", "is_group"])
+		
+		if is_group:
+			values.extend([lft, rgt])
+			condition += "and exists (\
+				select name from `tabWarehouse` wh where wh.name = sle.warehouse\
+				and wh.lft >= %s and wh.rgt <= %s)"
+		
+		else:
+			values.append(warehouse)
+			condition += " AND warehouse = %s"
 
 	if item_code:
 		values.append(item_code)
 		condition.append(" AND item_code = %s")
 
 	stock_ledger_entries = frappe.db.sql("""
-		SELECT item_code, stock_value
-		FROM `tabStock Ledger Entry`
+		SELECT item_code, stock_value, name, warehouse
+		FROM `tabStock Ledger Entry` sle
 		WHERE posting_date <= %s {0}
 		ORDER BY timestamp(posting_date, posting_time) DESC, name DESC
 	""".format(condition), values, as_dict=1)
 
 	sle_map = {}
 	for sle in stock_ledger_entries:
-		sle_map.setdefault(sle.item_code, flt(sle.stock_value))
-
+		if not sle_map.has_key((sle.item_code, sle.warehouse)):
+			sle_map[(sle.item_code, sle.warehouse)] = flt(sle.stock_value)
+		
 	return sum(sle_map.values())
 
+@frappe.whitelist()
 def get_stock_balance(item_code, warehouse, posting_date=None, posting_time=None, with_valuation_rate=False):
 	"""Returns stock balance quantity at given warehouse on given posting date or current date.
 
@@ -54,7 +66,29 @@ def get_stock_balance(item_code, warehouse, posting_date=None, posting_time=None
 	if with_valuation_rate:
 		return (last_entry.qty_after_transaction, last_entry.valuation_rate) if last_entry else (0.0, 0.0)
 	else:
-		return last_entry.qty_after_transaction or 0.0
+		return last_entry.qty_after_transaction if last_entry else 0.0
+
+@frappe.whitelist()
+def get_latest_stock_qty(item_code, warehouse=None):
+	values, condition = [item_code], ""
+	if warehouse:
+		lft, rgt, is_group = frappe.db.get_value("Warehouse", warehouse, ["lft", "rgt", "is_group"])
+	
+		if is_group:
+			values.extend([lft, rgt])
+			condition += "and exists (\
+				select name from `tabWarehouse` wh where wh.name = tabBin.warehouse\
+				and wh.lft >= %s and wh.rgt <= %s)"
+	
+		else:
+			values.append(warehouse)
+			condition += " AND warehouse = %s"
+	
+	actual_qty = frappe.db.sql("""select sum(actual_qty) from tabBin
+		where item_code=%s {0}""".format(condition), values)[0][0]
+
+	return actual_qty
+
 
 def get_latest_stock_balance():
 	bin_map = {}
@@ -91,8 +125,7 @@ def update_bin(args, allow_negative_stock=False, via_landed_cost_voucher=False):
 @frappe.whitelist()
 def get_incoming_rate(args):
 	"""Get Incoming Rate based on valuation method"""
-	from erpnext.stock.stock_ledger import get_previous_sle
-	
+	from erpnext.stock.stock_ledger import get_previous_sle, get_valuation_rate
 	if isinstance(args, basestring):
 		args = json.loads(args)
 
@@ -103,12 +136,17 @@ def get_incoming_rate(args):
 		valuation_method = get_valuation_method(args.get("item_code"))
 		previous_sle = get_previous_sle(args)
 		if valuation_method == 'FIFO':
-			if not previous_sle:
-				return 0.0
-			previous_stock_queue = json.loads(previous_sle.get('stock_queue', '[]') or '[]')
-			in_rate = get_fifo_rate(previous_stock_queue, args.get("qty") or 0) if previous_stock_queue else 0
+			if previous_sle:
+				previous_stock_queue = json.loads(previous_sle.get('stock_queue', '[]') or '[]')
+				in_rate = get_fifo_rate(previous_stock_queue, args.get("qty") or 0) if previous_stock_queue else 0
 		elif valuation_method == 'Moving Average':
 			in_rate = previous_sle.get('valuation_rate') or 0
+
+	if not in_rate:
+		voucher_no = args.get('voucher_no') or args.get('name')
+		in_rate = get_valuation_rate(args.get('item_code'), args.get('warehouse'),
+			args.get('voucher_type'), voucher_no, args.get('allow_zero_valuation'),
+			currency=erpnext.get_company_currency(args.get('company')), company=args.get('company'))
 
 	return in_rate
 
@@ -177,3 +215,8 @@ def validate_warehouse_company(warehouse, company):
 	if warehouse_company and warehouse_company != company:
 		frappe.throw(_("Warehouse {0} does not belong to company {1}").format(warehouse, company),
 			InvalidWarehouseCompany)
+
+def is_group_warehouse(warehouse):
+	if frappe.db.get_value("Warehouse", warehouse, "is_group"):
+		frappe.throw(_("Group node warehouse is not allowed to select for transactions"))
+	

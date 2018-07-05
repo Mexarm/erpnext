@@ -4,7 +4,8 @@
 // js inside blog page
 
 // shopping cart
-frappe.provide("shopping_cart");
+frappe.provide("erpnext.shopping_cart");
+var shopping_cart = erpnext.shopping_cart;
 
 $.extend(shopping_cart, {
 	show_error: function(title, text) {
@@ -16,7 +17,7 @@ $.extend(shopping_cart, {
 		shopping_cart.bind_address_select();
 		shopping_cart.bind_place_order();
 		shopping_cart.bind_change_qty();
-
+		shopping_cart.bind_dropdown_cart_buttons();
 	},
 
 	bind_address_select: function() {
@@ -24,9 +25,17 @@ $.extend(shopping_cart, {
 			if($(this).prop("checked")) {
 				var me = this;
 
+				// uncheck other shipping or billing addresses:
+				if ( $(this).is('input[data-fieldname=customer_address]') ) {
+					$('input[data-fieldname=customer_address]').not(this).prop('checked', false);
+				} else {
+					$('input[data-fieldname=shipping_address_name]').not(this).prop('checked', false);
+				}
+
 				return frappe.call({
 					type: "POST",
 					method: "erpnext.shopping_cart.cart.update_cart_address",
+					freeze: true,
 					args: {
 						address_fieldname: $(this).attr("data-fieldname"),
 						address_name: $(this).attr("data-address-name")
@@ -54,21 +63,26 @@ $.extend(shopping_cart, {
 		// bind update button
 		$(".cart-items").on("change", ".cart-qty", function() {
 			var item_code = $(this).attr("data-item-code");
-			frappe.freeze();
-			shopping_cart.update_cart({
-				item_code: item_code,
-				qty: $(this).val(),
-				with_items: 1,
-				btn: this,
-				callback: function(r) {
-					frappe.unfreeze();
-					if(!r.exc) {
-						$(".cart-items").html(r.message.items);
-						$(".cart-tax-items").html(r.message.taxes);
-						$(".cart-icon").hide();
-					}
-				},
-			});
+			var newVal = $(this).val();
+			shopping_cart.shopping_cart_update(item_code, newVal);
+		});
+
+		$(".cart-items").on('click', '.number-spinner button', function () {
+			var btn = $(this),
+				input = btn.closest('.number-spinner').find('input'),
+				oldValue = input.val().trim(),
+				newVal = 0;
+
+			if (btn.attr('data-dir') == 'up') {
+				newVal = parseInt(oldValue) + 1;
+			} else {
+				if (oldValue > 1) {
+					newVal = parseInt(oldValue) - 1;
+				}
+			}
+			input.val(newVal);
+			var item_code = input.attr("data-item-code");
+			shopping_cart.shopping_cart_update(item_code, newVal);
 		});
 	},
 
@@ -76,8 +90,8 @@ $.extend(shopping_cart, {
 		var shipping_selector;
 		if(shipping_rules) {
 			shipping_selector = '<select class="form-control">' + $.map(shipping_rules, function(rule) {
-					return '<option value="' + rule[0] + '">' + rule[1] + '</option>' }).join("\n") +
-				'</select>';
+				return '<option value="' + rule[0] + '">' + rule[1] + '</option>' }).join("\n") +
+			'</select>';
 		}
 
 		var $tax_row = $(repl('<div class="row">\
@@ -143,7 +157,12 @@ $.extend(shopping_cart, {
 	}
 });
 
-$(document).ready(function() {
+frappe.ready(function() {
 	$(".cart-icon").hide();
 	shopping_cart.bind_events();
 });
+
+function show_terms() {
+	var html = $(".cart-terms").html();
+	frappe.msgprint(html);
+}

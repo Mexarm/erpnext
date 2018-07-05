@@ -4,7 +4,12 @@
 from __future__ import unicode_literals
 import unittest
 import frappe
-from erpnext.shopping_cart.cart import _get_cart_quotation, update_cart, get_customer
+from frappe.utils import nowdate, add_months
+from erpnext.shopping_cart.cart import _get_cart_quotation, update_cart, get_party
+from erpnext.tests.utils import create_test_contact_and_address
+
+
+# test_dependencies = ['Payment Terms Template']
 
 class TestShoppingCart(unittest.TestCase):
 	"""
@@ -13,6 +18,7 @@ class TestShoppingCart(unittest.TestCase):
 	"""
 	def setUp(self):
 		frappe.set_user("Administrator")
+		create_test_contact_and_address()
 		self.enable_shopping_cart()
 
 	def tearDown(self):
@@ -25,8 +31,8 @@ class TestShoppingCart(unittest.TestCase):
 		# test if lead is created and quotation with new lead is fetched
 		quotation = _get_cart_quotation()
 		self.assertEquals(quotation.quotation_to, "Customer")
-		self.assertEquals(frappe.db.get_value("Contact", {"customer": quotation.customer}, "email_id"),
-			"test_cart_user@example.com")
+		self.assertEquals(quotation.contact_person,
+			frappe.db.get_value("Contact", dict(email_id="test_cart_user@example.com")))
 		self.assertEquals(quotation.lead, None)
 		self.assertEquals(quotation.contact_email, frappe.session.user)
 
@@ -58,7 +64,6 @@ class TestShoppingCart(unittest.TestCase):
 		self.assertEquals(quotation.get("items")[0].item_code, "_Test Item")
 		self.assertEquals(quotation.get("items")[0].qty, 1)
 		self.assertEquals(quotation.get("items")[0].amount, 10)
-
 
 		# add second item
 		update_cart("_Test Item 2", 1)
@@ -96,13 +101,6 @@ class TestShoppingCart(unittest.TestCase):
 		self.assertEquals(quotation.net_total, 20)
 		self.assertEquals(len(quotation.get("items")), 1)
 
-		# remove second item
-		update_cart("_Test Item 2", 0)
-		quotation = self.test_get_cart_customer()
-
-		self.assertEquals(len(quotation.get("items")), 0)
-		self.assertEquals(quotation.net_total, 0)
-
 	def test_tax_rule(self):
 		self.login_as_customer()
 		quotation = self.create_quotation()
@@ -125,17 +123,20 @@ class TestShoppingCart(unittest.TestCase):
 			"doctype": "Quotation",
 			"quotation_to": "Customer",
 			"order_type": "Shopping Cart",
-			"customer": get_customer(frappe.session.user).name,
+			"customer": get_party(frappe.session.user).name,
 			"docstatus": 0,
 			"contact_email": frappe.session.user,
 			"selling_price_list": "_Test Price List Rest of the World",
 			"currency": "USD",
-			"taxes_and_charges" : "_Test Tax 1",
+			"taxes_and_charges" : "_Test Tax 1 - _TC",
+			"conversion_rate":1,
+			"transaction_date" : nowdate(),
+			"valid_till" : add_months(nowdate(), 1),
 			"items": [{
 				"item_code": "_Test Item",
 				"qty": 1
 			}],
-			"taxes": frappe.get_doc("Sales Taxes and Charges Template", "_Test Tax 1").taxes,
+			"taxes": frappe.get_doc("Sales Taxes and Charges Template", "_Test Tax 1 - _TC").taxes,
 			"company": "_Test Company"
 		}
 
@@ -191,15 +192,16 @@ class TestShoppingCart(unittest.TestCase):
 		frappe.set_user("test_cart_user@example.com")
 
 	def login_as_customer(self):
-		self.create_user_if_not_exists("test_contact_customer@example.com")
+		self.create_user_if_not_exists("test_contact_customer@example.com",
+			"_Test Contact For _Test Customer")
 		frappe.set_user("test_contact_customer@example.com")
 
 	def remove_all_items_from_cart(self):
 		quotation = _get_cart_quotation()
-		quotation.set("items", [])
-		quotation.save(ignore_permissions=True)
+		quotation.flags.ignore_permissions=True
+		quotation.delete()
 
-	def create_user_if_not_exists(self, email):
+	def create_user_if_not_exists(self, email, first_name = None):
 		if frappe.db.exists("User", email):
 			return
 
@@ -208,7 +210,7 @@ class TestShoppingCart(unittest.TestCase):
 			"user_type": "Website User",
 			"email": email,
 			"send_welcome_email": 0,
-			"first_name": email.split("@")[0]
+			"first_name": first_name or email.split("@")[0]
 		}).insert(ignore_permissions=True)
 
 test_dependencies = ["Sales Taxes and Charges Template", "Price List", "Item Price", "Shipping Rule", "Currency Exchange",

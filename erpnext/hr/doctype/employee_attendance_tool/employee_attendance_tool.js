@@ -2,8 +2,10 @@ frappe.ui.form.on("Employee Attendance Tool", {
 	refresh: function(frm) {
 		frm.disable_save();
 	},
-
+	
 	onload: function(frm) {
+		frm.doc.department = frm.doc.branch = frm.doc.company = "All";
+		frm.set_value("date", frappe.datetime.get_today());
 		erpnext.employee_attendance_tool.load_employees(frm);
 	},
 
@@ -22,8 +24,7 @@ frappe.ui.form.on("Employee Attendance Tool", {
 	company: function(frm) {
 		erpnext.employee_attendance_tool.load_employees(frm);
 	}
-
-
+	
 });
 
 
@@ -80,14 +81,14 @@ erpnext.MarkedEmployee = Class.extend({
 
 		var row;
 		$.each(employee, function(i, m) {
-			var attendance_icon = "icon-check";
+			var attendance_icon = "fa fa-check";
 			var color_class = "";
 			if(m.status == "Absent") {
-				attendance_icon = "icon-check-empty"
+				attendance_icon = "fa fa-check-empty"
 				color_class = "text-muted";
 			}
 			else if(m.status == "Half Day") {
-				attendance_icon = "icon-check-minus"
+				attendance_icon = "fa fa-check-minus"
 			}
 
 			if (i===0 || i % 4===0) {

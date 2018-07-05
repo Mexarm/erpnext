@@ -23,14 +23,12 @@ Sie können die Einstandskosten an jedem zukünftigen Zeitpunkt über einen Eins
 
 Im Dokument können Sie verschiedene Kaufbelege auswählen und alle Artikel daraus abrufen. Dann sollten Sie zutreffende Abgaben aus der Tabelle "Steuern und Abgaben" hinzufügen. Die hinzugefügten Abgaben werden proportional auf die Artikel aufgeteilt, basierend auf ihrem Wert.
 
-<img class="screenshot" alt="Einstandskostenbeleg" src="{{docs_base_url}}/assets/img/stock/landed-cost.png">
+<img class="screenshot" alt="Einstandskostenbeleg" src="/docs/assets/img/stock/landed-cost.png">
 
 ### Was passiert bei der Ausgabe?
 
-1\. Bei der Ausgabe des Einstandskostenbelegs werden die zutreffenden Einstandskosten in der Artikelliste des Kaufbelegs aktualisiert.
-
-2\. Die Bewertung der Artikel wird basierend auf den neuen Einstandskosten neu berechnet.
-
-3\. Wenn Sie die Ständige Inventur nutzen, verbucht das System Buchungen im Hauptbuch um den Lagerbestand zu korrigieren. Es belastet (erhöht) das Konto des zugehörigen Lagers und entlastet (erniedrigt) das Konto "Ausgaben in Bewertung eingerechnet". Wenn Artikel schon geliefert wurden, wurden die Selbstkosten zur alten Bewertung verbucht. Daher werden Hauptbuch-Buchungen erneut für alle zukünftigen ausgehenden Buchungen verbundener Artikel erstellt um den Selbstkosten-Betrag zu korrigieren.
+1. Bei der Ausgabe des Einstandskostenbelegs werden die zutreffenden Einstandskosten in der Artikelliste des Kaufbelegs aktualisiert.
+2. Die Bewertung der Artikel wird basierend auf den neuen Einstandskosten neu berechnet.
+3. Wenn Sie die Ständige Inventur nutzen, verbucht das System Buchungen im Hauptbuch um den Lagerbestand zu korrigieren. Es belastet (erhöht) das Konto des zugehörigen Lagers und entlastet (erniedrigt) das Konto "Ausgaben in Bewertung eingerechnet". Wenn Artikel schon geliefert wurden, wurden die Selbstkosten zur alten Bewertung verbucht. Daher werden Hauptbuch-Buchungen erneut für alle zukünftigen ausgehenden Buchungen verbundener Artikel erstellt um den Selbstkosten-Betrag zu korrigieren.
 
 {next}

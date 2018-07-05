@@ -13,24 +13,6 @@ $.extend(erpnext, {
 			return frappe.boot.sysdefaults.currency;
 	},
 
-	get_fiscal_year: function(company, date, fn) {
-		if(frappe.meta.get_docfield(cur_frm.doctype, "fiscal_year")) {
-			frappe.call({
-				type:"GET",
-				method: "erpnext.accounts.utils.get_fiscal_year",
-				args: {
-					"company": company,
-					"date": date,
-					"verbose": 0
-				},
-				callback: function(r) {
-					if (r.message)	cur_frm.set_value("fiscal_year", r.message[0]);
-					if (fn) fn();
-				}
-			});
-		}
-	},
-
 	toggle_naming_series: function() {
 		if(cur_frm.fields_dict.naming_series) {
 			cur_frm.toggle_display("naming_series", cur_frm.doc.__islocal?true:false);
@@ -49,15 +31,25 @@ $.extend(erpnext, {
 		}
 	},
 
+	is_perpetual_inventory_enabled: function(company) {
+		if(company) {
+			return frappe.get_doc(":Company", company).enable_perpetual_inventory
+		}
+	},
+
+	stale_rate_allowed: () => {
+		return cint(frappe.boot.sysdefaults.allow_stale);
+	},
+
 	setup_serial_no: function() {
 		var grid_row = cur_frm.open_grid_row();
-		if(!grid_row.fields_dict.serial_no ||
-			grid_row.fields_dict.serial_no.get_status()!=="Write") return;
+		if(!grid_row || !grid_row.grid_form.fields_dict.serial_no ||
+			grid_row.grid_form.fields_dict.serial_no.get_status()!=="Write") return;
 
 		var $btn = $('<button class="btn btn-sm btn-default">'+__("Add Serial No")+'</button>')
 			.appendTo($("<div>")
 				.css({"margin-bottom": "10px", "margin-top": "10px"})
-				.appendTo(grid_row.fields_dict.serial_no.$wrapper));
+				.appendTo(grid_row.grid_form.fields_dict.serial_no.$wrapper));
 
 		$btn.on("click", function() {
 			var d = new frappe.ui.Dialog({
@@ -65,6 +57,7 @@ $.extend(erpnext, {
 				fields: [
 					{
 						"fieldtype": "Link",
+						"fieldname": "serial_no",
 						"options": "Serial No",
 						"label": __("Serial No"),
 						"get_query": function () {
@@ -78,6 +71,7 @@ $.extend(erpnext, {
 					},
 					{
 						"fieldtype": "Button",
+						"fieldname": "add",
 						"label": __("Add")
 					}
 				]
@@ -87,7 +81,7 @@ $.extend(erpnext, {
 				var serial_no = d.get_value("serial_no");
 				if(serial_no) {
 					var val = (grid_row.doc.serial_no || "").split("\n").concat([serial_no]).join("\n");
-					grid_row.fields_dict.serial_no.set_model_value(val.trim());
+					grid_row.grid_form.fields_dict.serial_no.set_model_value(val.trim());
 				}
 				d.hide();
 				return false;
@@ -100,30 +94,21 @@ $.extend(erpnext, {
 
 
 $.extend(erpnext.utils, {
-	clear_address_and_contact: function(frm) {
-		$(frm.fields_dict['address_html'].wrapper).html("");
-		frm.fields_dict['contact_html'] && $(frm.fields_dict['contact_html'].wrapper).html("");
-	},
-	
-	render_address_and_contact: function(frm) {
-		// render address
-		$(frm.fields_dict['address_html'].wrapper)
-			.html(frappe.render_template("address_list",
-				cur_frm.doc.__onload))
-			.find(".btn-address").on("click", function() {
-				new_doc("Address");
-			});
-
-		// render contact
-		if(frm.fields_dict['contact_html']) {
-			$(frm.fields_dict['contact_html'].wrapper)
-				.html(frappe.render_template("contact_list",
-					cur_frm.doc.__onload))
-				.find(".btn-contact").on("click", function() {
-					new_doc("Contact");
-				}
-			);
+	set_party_dashboard_indicators: function(frm) {
+		if(frm.doc.__onload && frm.doc.__onload.dashboard_info) {
+			var info = frm.doc.__onload.dashboard_info;
+			frm.dashboard.add_indicator(__('Annual Billing: {0}',
+				[format_currency(info.billing_this_year, info.currency)]), 'blue');
+			frm.dashboard.add_indicator(__('Total Unpaid: {0}',
+				[format_currency(info.total_unpaid, info.currency)]),
+				info.total_unpaid ? 'orange' : 'green');
 		}
+	},
+
+	get_party_name: function(party_type) {
+		var dict = {'Customer': 'customer_name', 'Supplier': 'supplier_name', 'Employee': 'employee_name',
+			'Member': 'member_name'};
+		return dict[party_type];
 	},
 
 	copy_value_in_all_row: function(doc, dt, dn, table_fieldname, fieldname) {
@@ -135,8 +120,183 @@ $.extend(erpnext.utils, {
 			}
 		}
 		refresh_field(table_fieldname);
-	}
+	},
+
+	get_terms: function(tc_name, doc, callback) {
+		if(tc_name) {
+			return frappe.call({
+				method: 'erpnext.setup.doctype.terms_and_conditions.terms_and_conditions.get_terms_and_conditions',
+				args: {
+					template_name: tc_name,
+					doc: doc
+				},
+				callback: function(r) {
+					callback(r)
+				}
+			});
+		}
+	},
+
+	make_subscription: function(doctype, docname) {
+		frappe.call({
+			method: "erpnext.accounts.doctype.subscription.subscription.make_subscription",
+			args: {
+				doctype: doctype,
+				docname: docname
+			},
+			callback: function(r) {
+				var doclist = frappe.model.sync(r.message);
+				frappe.set_route("Form", doclist[0].doctype, doclist[0].name);
+			}
+		})
+	},
+
+	/**
+	* Checks if the first row of a given child table is empty
+	* @param child_table - Child table Doctype
+	* @return {Boolean}
+	**/
+	first_row_is_empty: function(child_table){
+		if($.isArray(child_table) && child_table.length > 0) {
+			return !child_table[0].item_code;
+		}
+		return false;
+	},
+
+	/**
+	* Removes the first row of a child table if it is empty
+	* @param {_Frm} frm - The current form
+	* @param {String} child_table_name - The child table field name
+	* @return {Boolean}
+	**/
+	remove_empty_first_row: function(frm, child_table_name){
+		const rows = frm['doc'][child_table_name];
+		if (this.first_row_is_empty(rows)){
+			frm['doc'][child_table_name] = rows.splice(1);
+		}
+		return rows;
+	},
 });
+
+erpnext.utils.map_current_doc = function(opts) {
+	if(opts.get_query_filters) {
+		opts.get_query = function() {
+			return {filters: opts.get_query_filters};
+		}
+	}
+	var _map = function() {
+		if($.isArray(cur_frm.doc.items) && cur_frm.doc.items.length > 0) {
+			// remove first item row if empty
+			if(!cur_frm.doc.items[0].item_code) {
+				cur_frm.doc.items = cur_frm.doc.items.splice(1);
+			}
+
+			// find the doctype of the items table
+			var items_doctype = frappe.meta.get_docfield(cur_frm.doctype, 'items').options;
+
+			// find the link fieldname from items table for the given
+			// source_doctype
+			var link_fieldname = null;
+			frappe.get_meta(items_doctype).fields.forEach(function(d) {
+				if(d.options===opts.source_doctype) link_fieldname = d.fieldname; });
+
+			// search in existing items if the source_name is already set and full qty fetched
+			var already_set = false;
+			var item_qty_map = {};
+
+			$.each(cur_frm.doc.items, function(i, d) {
+				opts.source_name.forEach(function(src) {
+					if(d[link_fieldname]==src) {
+						already_set = true;
+						if (item_qty_map[d.item_code])
+							item_qty_map[d.item_code] += flt(d.qty);
+						else
+							item_qty_map[d.item_code] = flt(d.qty);
+					}
+				});
+			});
+
+			if(already_set) {
+				opts.source_name.forEach(function(src) {
+					frappe.model.with_doc(opts.source_doctype, src, function(r) {
+						var source_doc = frappe.model.get_doc(opts.source_doctype, src);
+						$.each(source_doc.items || [], function(i, row) {
+							if(row.qty > flt(item_qty_map[row.item_code])) {
+								already_set = false;
+								return false;
+							}
+						})
+					})
+
+					if(already_set) {
+						frappe.msgprint(__("You have already selected items from {0} {1}",
+							[opts.source_doctype, src]));
+						return;
+					}
+
+				})
+			}
+		}
+
+		return frappe.call({
+			// Sometimes we hit the limit for URL length of a GET request
+			// as we send the full target_doc. Hence this is a POST request.
+			type: "POST",
+			method: 'frappe.model.mapper.map_docs',
+			args: {
+				"method": opts.method,
+				"source_names": opts.source_name,
+				"target_doc": cur_frm.doc,
+			},
+			callback: function(r) {
+				if(!r.exc) {
+					var doc = frappe.model.sync(r.message);
+					cur_frm.dirty();
+					cur_frm.refresh();
+				}
+			}
+		});
+	}
+	if(opts.source_doctype) {
+		var d = new frappe.ui.form.MultiSelectDialog({
+			doctype: opts.source_doctype,
+			target: opts.target,
+			date_field: opts.date_field || undefined,
+			setters: opts.setters,
+			get_query: opts.get_query,
+			action: function(selections, args) {
+				let values = selections;
+				if(values.length === 0){
+					frappe.msgprint(__("Please select {0}", [opts.source_doctype]))
+					return;
+				}
+				opts.source_name = values;
+				opts.setters = args;
+				d.dialog.hide();
+				_map();
+			},
+		});
+	} else if(opts.source_name) {
+		opts.source_name = [opts.source_name];
+		_map();
+	}
+}
+
+frappe.form.link_formatters['Item'] = function(value, doc) {
+	if(doc && doc.item_name && doc.item_name !== value) {
+		return value? value + ': ' + doc.item_name: doc.item_name;
+	} else {
+		return value;
+	}
+}
+
+frappe.form.link_formatters['Employee'] = function(value, doc) {
+	if(doc && doc.employee_name && doc.employee_name !== value) {
+		return value? value + ': ' + doc.employee_name: doc.employee_name;
+	} else {
+		return value;
+	}
+}
 
 // add description on posting time
 $(document).on('app_ready', function() {
@@ -145,7 +305,7 @@ $(document).on('app_ready', function() {
 			"Delivery Note", "Purchase Receipt", "Sales Invoice"], function(i, d) {
 			frappe.ui.form.on(d, "onload", function(frm) {
 				cur_frm.set_df_property("posting_time", "description",
-					sys_defaults.time_zone);
+					frappe.sys_defaults.time_zone);
 			});
 		});
 	}
