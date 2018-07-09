@@ -3,11 +3,11 @@
 
 from __future__ import unicode_literals
 import frappe
-from frappe.model.naming import make_autoname
+from frappe.model.naming import set_name_by_naming_series
 from frappe import _, msgprint, throw
 import frappe.defaults
 from frappe.utils import flt, cint, cstr
-from frappe.desk.reportview import build_match_conditions
+from frappe.desk.reportview import build_match_conditions, get_filters_cond
 from erpnext.utilities.transaction_base import TransactionBase
 from erpnext.accounts.party import validate_party_accounts, get_dashboard_info, get_timeline_data # keep this
 from frappe.contacts.address_and_contact import load_address_and_contact, delete_contact_and_address
@@ -24,6 +24,9 @@ class Customer(TransactionBase):
 
 	def load_dashboard_info(self):
 		info = get_dashboard_info(self.doctype, self.name)
+		loyalty_point_details = self.get_loyalty_points()
+		if loyalty_point_details and loyalty_point_details.get("loyalty_points"):
+			info["loyalty_point"] = loyalty_point_details.loyalty_points
 		self.set_onload('dashboard_info', info)
 
 	def autoname(self):
@@ -31,10 +34,12 @@ class Customer(TransactionBase):
 		if cust_master_name == 'Customer Name':
 			self.name = self.get_customer_name()
 		else:
-			if not self.naming_series:
-				frappe.throw(_("Series is mandatory"), frappe.MandatoryError)
+			set_name_by_naming_series(self)
 
-			self.name = make_autoname(self.naming_series+'.#####')
+	def get_loyalty_points(self):
+		if self.loyalty_program:
+			from erpnext.accounts.doctype.loyalty_program.loyalty_program import get_loyalty_details
+			return get_loyalty_details(self.name, self.loyalty_program)
 
 	def get_customer_name(self):
 		if frappe.db.get_value("Customer", self.customer_name):
@@ -54,6 +59,7 @@ class Customer(TransactionBase):
 		self.flags.old_lead = self.lead_name
 		validate_party_accounts(self)
 		self.validate_credit_limit_on_change()
+		self.set_loyalty_program()
 		self.check_customer_group_change()
 
 	def check_customer_group_change(self):
@@ -181,8 +187,19 @@ class Customer(TransactionBase):
 		if frappe.defaults.get_global_default('cust_master_name') == 'Customer Name':
 			frappe.db.set(self, "customer_name", newdn)
 
+	def set_loyalty_program(self):
+		if not self.loyalty_program:
+			loyalty_programs = frappe.get_all("Loyalty Program", fields=["name", "customer_group",
+				"customer_territory"], filters={"auto_opt_in": 1, "disabled": 0})
+			from frappe.desk.treeview import get_children
+			for loyalty_program in loyalty_programs:
+				customer_groups = get_children("Customer Group", loyalty_program.customer_group, )
+				if self.customer_group in customer_groups and\
+					self.territory in get_children("Territory", loyalty_program.customer_territory):
+					self.loyalty_program = loyalty_program.name
 
-def get_customer_list(doctype, txt, searchfield, start, page_len, filters):
+
+def get_customer_list(doctype, txt, searchfield, start, page_len, filters=None):
 	if frappe.db.get_default("cust_master_name") == "Customer Name":
 		fields = ["name", "customer_group", "territory"]
 	else:
@@ -190,6 +207,10 @@ def get_customer_list(doctype, txt, searchfield, start, page_len, filters):
 
 	match_conditions = build_match_conditions("Customer")
 	match_conditions = "and {}".format(match_conditions) if match_conditions else ""
+
+	if filters:
+		filter_conditions = get_filters_cond(doctype, filters, [])
+		match_conditions += "{}".format(filter_conditions)
 
 	return frappe.db.sql("""select %s from `tabCustomer` where docstatus < 2
 		and (%s like %s or customer_name like %s)
@@ -322,6 +343,18 @@ def get_customer_primary_contact(doctype, txt, searchfield, start, page_len, fil
 			where `tabContact`.name = `tabDynamic Link`.parent and `tabDynamic Link`.link_name = %(customer)s
 			and `tabDynamic Link`.link_doctype = 'Customer' and `tabContact`.is_primary_contact = 1
 			and `tabContact`.name like %(txt)s
+		""", {
+			'customer': customer,
+			'txt': '%%%s%%' % txt
+		})
+
+def get_customer_primary_address(doctype, txt, searchfield, start, page_len, filters):
+	customer = frappe.db.escape(filters.get('customer'))
+	return frappe.db.sql("""
+		select `tabAddress`.name from `tabAddress`, `tabDynamic Link`
+			where `tabAddress`.name = `tabDynamic Link`.parent and `tabDynamic Link`.link_name = %(customer)s
+			and `tabDynamic Link`.link_doctype = 'Customer' and `tabAddress`.is_primary_address = 1
+			and `tabAddress`.name like %(txt)s
 		""", {
 			'customer': customer,
 			'txt': '%%%s%%' % txt

@@ -17,6 +17,8 @@ erpnext.accounts.SalesInvoiceController = erpnext.selling.SellingController.exte
 	onload: function() {
 		var me = this;
 		this._super();
+		console.log("class erpnext.accounts.SalesInvoiceController, onload this->", this);
+		
 
 		if(!this.frm.doc.__islocal && !this.frm.doc.customer && this.frm.doc.debit_to) {
 			// show debit_to in print format
@@ -36,6 +38,7 @@ erpnext.accounts.SalesInvoiceController = erpnext.selling.SellingController.exte
 	},
 
 	refresh: function(doc, dt, dn) {
+		console.log("triggered the SalesInvoiceController");
 		this._super();
 		if(cur_frm.msgbox && cur_frm.msgbox.$wrapper.is(":visible")) {
 			// hide new msgbox
@@ -47,6 +50,13 @@ erpnext.accounts.SalesInvoiceController = erpnext.selling.SellingController.exte
 		this.show_general_ledger();
 
 		if(doc.update_stock) this.show_stock_ledger();
+
+		if (doc.docstatus == 1 && doc.outstanding_amount!=0
+			&& !(cint(doc.is_return) && doc.return_against)) {
+			cur_frm.add_custom_button(__('Payment'),
+				this.make_payment_entry, __("Make"));
+			cur_frm.page.set_inner_btn_group_as_primary(__("Make"));
+		}
 
 		if(doc.docstatus==1 && !doc.is_return) {
 
@@ -76,17 +86,12 @@ erpnext.accounts.SalesInvoiceController = erpnext.selling.SellingController.exte
 				}
 			}
 
-			if(doc.outstanding_amount!=0 && !cint(doc.is_return)) {
-				cur_frm.add_custom_button(__('Payment'),
-					this.make_payment_entry, __("Make"));
-			}
-
 			if(doc.outstanding_amount>0 && !cint(doc.is_return)) {
 				cur_frm.add_custom_button(__('Payment Request'),
 					this.make_payment_request, __("Make"));
 			}
 
-			if(!doc.subscription) {
+			if(!doc.auto_repeat) {
 				cur_frm.add_custom_button(__('Subscription'), function() {
 					erpnext.utils.make_subscription(doc.doctype, doc.name)
 				}, __("Make"))
@@ -101,6 +106,19 @@ erpnext.accounts.SalesInvoiceController = erpnext.selling.SellingController.exte
 		}
 
 		this.set_default_print_format();
+		var me = this;
+		if (doc.docstatus == 1 && !doc.inter_company_invoice_reference) {
+			frappe.model.with_doc("Customer", me.frm.doc.customer, function() {
+				var customer = frappe.model.get_doc("Customer", me.frm.doc.customer);
+				var internal = customer.is_internal_customer;
+				var disabled = customer.disabled;
+				if (internal == 1 && disabled == 0) {
+					me.frm.add_custom_button("Inter Company Invoice", function() {
+						me.make_inter_company_invoice();
+					}, __("Make"));
+				}
+			});
+		}
 	},
 
 	on_submit: function(doc, dt, dn) {
@@ -113,18 +131,6 @@ erpnext.accounts.SalesInvoiceController = erpnext.selling.SellingController.exte
 		$.each(doc["items"], function(i, row) {
 			if(row.delivery_note) frappe.model.clear_doc("Delivery Note", row.delivery_note)
 		})
-
-		if(this.frm.doc.is_pos) {
-			this.frm.msgbox = frappe.msgprint(
-				`<a class="btn btn-primary" onclick="cur_frm.print_preview.printit(true)" style="margin-right: 5px;">
-					${__('Print')}</a>
-				<a class="btn btn-default" href="javascript:frappe.new_doc(cur_frm.doctype);">
-					${__('New')}</a>`
-				);
-
-		} else if(cint(frappe.boot.notification_settings.sales_invoice)) {
-			this.frm.email_doc(frappe.boot.notification_settings.sales_invoice_message);
-		}
 	},
 
 	set_default_print_format: function() {
@@ -213,11 +219,9 @@ erpnext.accounts.SalesInvoiceController = erpnext.selling.SellingController.exte
 	tc_name: function() {
 		this.get_terms();
 	},
-
 	customer: function() {
 		var me = this;
 		if(this.frm.updating_party_details) return;
-
 		erpnext.utils.get_party_details(this.frm,
 			"erpnext.accounts.party.get_party_details", {
 				posting_date: this.frm.doc.posting_date,
@@ -227,7 +231,14 @@ erpnext.accounts.SalesInvoiceController = erpnext.selling.SellingController.exte
 				price_list: this.frm.doc.selling_price_list,
 			}, function() {
 				me.apply_pricing_rule();
-			})
+			});
+	},
+
+	make_inter_company_invoice: function() {
+		frappe.model.open_mapped_doc({
+			method: "erpnext.accounts.doctype.sales_invoice.sales_invoice.make_inter_company_purchase_invoice",
+			frm: me.frm
+		});
 	},
 
 	debit_to: function() {
@@ -347,7 +358,7 @@ erpnext.accounts.SalesInvoiceController = erpnext.selling.SellingController.exte
 				});
 			}
 		}
-		else this.frm.trigger("refresh")
+		else this.frm.trigger("refresh");
 	},
 
 	amount: function(){
@@ -356,13 +367,21 @@ erpnext.accounts.SalesInvoiceController = erpnext.selling.SellingController.exte
 
 	change_amount: function(){
 		if(this.frm.doc.paid_amount > this.frm.doc.grand_total){
-			this.calculate_write_off_amount()
+			this.calculate_write_off_amount();
 		}else {
-			this.frm.set_value("change_amount", 0.0)
-			this.frm.set_value("base_change_amount", 0.0)
+			this.frm.set_value("change_amount", 0.0);
+			this.frm.set_value("base_change_amount", 0.0);
 		}
 
 		this.frm.refresh_fields();
+	},
+
+	loyalty_amount: function(){
+		console.log("triggered the loyalty amount");
+		this.calculate_outstanding_amount();
+		this.frm.refresh_field("outstanding_amount");
+		this.frm.refresh_field("paid_amount");
+		this.frm.refresh_field("base_paid_amount");
 	}
 });
 
@@ -513,7 +532,12 @@ cur_frm.set_query("asset", "items", function(doc, cdt, cdn) {
 });
 
 frappe.ui.form.on('Sales Invoice', {
+	refresh: function(frm) {
+		frm.add_fetch('customer', 'loyalty_program', 'loyalty_program');
+	},
+
 	setup: function(frm){
+		
 		frm.custom_make_buttons = {
 			'Delivery Note': 'Delivery',
 			'Sales Invoice': 'Sales Return',
@@ -536,6 +560,16 @@ frappe.ui.form.on('Sales Invoice', {
 						'company': doc.company,
 						"is_group": 0
 					}
+				}
+			}
+		}
+
+		frm.fields_dict['items'].grid.get_field('deferred_revenue_account').get_query = function(doc) {
+			return {
+				filters: {
+					'root_type': 'Liability',
+					'company': doc.company,
+					"is_group": 0
 				}
 			}
 		}
@@ -594,7 +628,71 @@ frappe.ui.form.on('Sales Invoice', {
 				refresh_field(['timesheets'])
 			}
 		})
+	},
+
+	onload: function(frm) {
+		frm.redemption_conversion_factor = null;
+	},
+
+	redeem_loyalty_points: function(frm) {
+		frm.events.get_loyalty_details(frm);
+	},
+
+	loyalty_points: function(frm) {
+		if (frm.redemption_conversion_factor) {
+			frm.events.set_loyalty_points(frm);
+		} else {
+			frappe.call({
+				method: "erpnext.accounts.doctype.loyalty_program.loyalty_program.get_redeemption_factor",
+				args: {
+					"loyalty_program": frm.doc.loyalty_program
+				},
+				callback: function(r) {
+					if (r) {
+						frm.redemption_conversion_factor = r.message;
+						frm.events.set_loyalty_points(frm);
+					}
+				}
+			});
+		}
+	},
+
+	get_loyalty_details: function(frm) {
+		if (frm.doc.customer && frm.doc.redeem_loyalty_points) {
+			frappe.call({
+				method: "erpnext.accounts.doctype.loyalty_program.loyalty_program.get_loyalty_program_details",
+				args: {
+					"customer": frm.doc.customer,
+					"till_date": frm.doc.posting_date,
+					"company": frm.doc.company
+				},
+				callback: function(r) {
+					if (r) {
+						frm.set_value("loyalty_program", r.message.loyalty_program);
+						frm.set_value("loyalty_redemption_account", r.message.expense_account);
+						frm.set_value("loyalty_redemption_cost_center", r.message.cost_center);
+						frm.redemption_conversion_factor = r.message.conversion_factor;
+						// let max_loyalty_points = parseInt((frm.doc.grand_total-frm.doc.total_advance)/r.message.conversion_factor);
+						// let redeemable_points = max_loyalty_points > r.message.loyalty_points ? r.message.loyalty_points : max_loyalty_points;
+						// frm.set_value("loyalty_points", redeemable_points);
+					}
+				}
+			});
+		}
+	},
+
+	set_loyalty_points: function(frm) {
+		if (frm.redemption_conversion_factor) {
+			let loyalty_amount = flt(frm.redemption_conversion_factor*flt(frm.doc.loyalty_points), precision("loyalty_amount"));
+			var remaining_amount = flt(frm.doc.grand_total - frm.doc.total_advance)
+			if (frm.doc.grand_total && (remaining_amount < loyalty_amount)) {
+				let redeemable_amount = parseInt(remaining_amount/frm.redemption_conversion_factor);
+				frappe.throw(__("You can only redeem max {0} points in this order.",[redeemable_amount]));
+			}
+			frm.set_value("loyalty_amount", loyalty_amount);
+		}
 	}
+
 })
 
 frappe.ui.form.on('Sales Invoice Timesheet', {
@@ -633,4 +731,3 @@ var calculate_total_billing_amount =  function(frm) {
 
 	refresh_field('total_billing_amount')
 }
-

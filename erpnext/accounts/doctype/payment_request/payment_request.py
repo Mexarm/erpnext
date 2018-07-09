@@ -34,7 +34,7 @@ class PaymentRequest(Document):
 			frappe.throw(_("Transaction currency must be same as Payment Gateway currency"))
 
 	def on_submit(self):
-		send_mail = True
+		send_mail = self.payment_gateway_validation()
 		ref_doc = frappe.get_doc(self.reference_doctype, self.reference_name)
 
 		if (hasattr(ref_doc, "order_type") and getattr(ref_doc, "order_type") == "Shopping Cart") \
@@ -57,6 +57,16 @@ class PaymentRequest(Document):
 			si = make_sales_invoice(self.reference_name, ignore_permissions=True)
 			si = si.insert(ignore_permissions=True)
 			si.submit()
+
+	def payment_gateway_validation(self):
+		try:
+			controller = get_payment_gateway_controller(self.payment_gateway)
+			if hasattr(controller, 'on_payment_request_submission'):
+				return controller.on_payment_request_submission(self)
+			else:
+				return True
+		except Exception:
+			return False
 
 	def set_payment_request_url(self):
 		if self.payment_account:
@@ -230,14 +240,23 @@ def make_payment_request(**args):
 	"""Make payment request"""
 
 	args = frappe._dict(args)
+
 	ref_doc = frappe.get_doc(args.dt, args.dn)
 	grand_total = get_amount(ref_doc, args.dt)
+	if args.loyalty_points and args.dt == "Sales Order":
+		from erpnext.accounts.doctype.loyalty_program.loyalty_program import validate_loyalty_points
+		loyalty_amount = validate_loyalty_points(ref_doc, int(args.loyalty_points))
+		frappe.db.set_value("Sales Order", args.dn, "loyalty_points", int(args.loyalty_points), update_modified=False)
+		frappe.db.set_value("Sales Order", args.dn, "loyalty_amount", loyalty_amount, update_modified=False)
+		grand_total = grand_total - loyalty_amount
+
 	gateway_account = get_gateway_details(args) or frappe._dict()
 
 	existing_payment_request = frappe.db.get_value("Payment Request",
 		{"reference_doctype": args.dt, "reference_name": args.dn, "docstatus": ["!=", 2]})
 
 	if existing_payment_request:
+		frappe.db.set_value("Payment Request", existing_payment_request, "grand_total", grand_total, update_modified=False)
 		pr = frappe.get_doc("Payment Request", existing_payment_request)
 
 	else:
@@ -249,7 +268,7 @@ def make_payment_request(**args):
 			"currency": ref_doc.currency,
 			"grand_total": grand_total,
 			"email_to": args.recipient_id or "",
-			"subject": "Payment Request for %s"%args.dn,
+			"subject": _("Payment Request for {0}").format(args.dn),
 			"message": gateway_account.get("message") or get_dummy_message(ref_doc),
 			"reference_doctype": args.dt,
 			"reference_name": args.dn
